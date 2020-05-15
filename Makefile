@@ -2,14 +2,14 @@
 
 .POSIX:
 
-BIN=testi
+BIN=main
 LDFLAGS= `pkg-config --cflags gtk+-2.0`
 LDLIBS= `pkg-config --libs gtk+-2.0`
 $(CFLAGS)= -g -std=c99
 
 CC = gcc
 LD = gcc
-all: testi
+all: main
 
 $(BIN).o: $(BIN).c
 
