@@ -6,10 +6,6 @@
 #include "control_functions.h"
 #include <gtk/gtk.h>
 
-static void callback(GtkWidget * widget, gpointer data){
-    g_print("You pressed button %s, brightness is %d\n", (gchar *) data, brightness);
-}
-
 static GtkWidget *make_menu_item(gchar *name, GCallback callback, char* data){
     GtkWidget *item;
     item = gtk_menu_item_new_with_label(name);
@@ -24,29 +20,69 @@ static gboolean delete_event(GtkWidget *widget, gpointer data){
 }
 
 static void auto_ss(GtkToggleButton *button, GtkAdjustment *adj){
-    //button->active ? (shutter_speed = -1) : (shutter_speed = (long int)adj->value);
     if(button->active){
-        shutter_speed = -1;
+        auto_settings &= 0xDF; //11011111
     }else{
-        shutter_speed = 0;
+        auto_settings |= 0x20; //00100000
         shutter_speed_control(adj, NULL);
     }
 }
 
-static void picture(){
+static void auto_iso(GtkToggleButton *button, GtkAdjustment *adj){
+    if(button->active){
+        auto_settings &= 0xEF; //11101111
+    }else{
+        auto_settings |= 0x10; //00010000
+        iso_control(adj);
+    }
+}
+
+static void auto_sh(GtkToggleButton *button, GtkAdjustment *adj){
+    if(button->active){
+        auto_settings &= 0xFD; //11111101
+    }else{
+        auto_settings |= 0x02; //00000010
+        sharpness_control(adj);
+    }
+}
+
+static void auto_co(GtkToggleButton *button, GtkAdjustment *adj){
+    if(button->active){
+        auto_settings &= 0xFB; //11111011
+    }else{
+        auto_settings |= 0x04; //00000100
+        contrast_control(adj);
+    }
+}
+
+static void auto_sa(GtkToggleButton *button, GtkAdjustment *adj){
+    if(button->active){
+        auto_settings &= 0xF7; //11110111
+    }else{
+        auto_settings |= 0x08; //00001000
+        saturation_control(adj);
+    }
+}
+
+static void picture(){ //creates the terminal command and takes a picture with it
+
     time_t t = time(NULL);
     struct tm tm = *localtime(&t);
     char command[200] = "\0";
-
-    if(shutter_speed == -1){
-        sprintf(command, "raspistill -sh %d -co %d -br %d -sa %d -ISO %d -w %s -h %s -o %d-%02d-%02d_%02d:%02d:%02d.jpg", 
-                sharpness, contrast, brightness, saturation, iso, resolution[0], resolution[1], tm.tm_year+1900, tm.tm_mon +1,
-                tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);    
-        }else{
-            sprintf(command, "raspistill -sh %d -co %d -br %d -sa %d -ISO %d -ss %d -w %s -h %s -o %d-%02d-%02d_%02d:%02d:%02d.jpg", 
-                    sharpness, contrast, brightness, saturation, iso, shutter_speed, resolution[0], resolution[1], tm.tm_year+1900, tm.tm_mon +1,
-                    tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+    char buffer[50] = "\0";
+    strcpy(command, "raspistill ");
+    for(int i = 0; i < ARGUMENTS; i++){
+        if((auto_settings >> i) & 0x01 == 0x01){
+            strcat(command, command_arguments[i]);
         }
+    }
+    if(auto_settings >> 5 == 0x01){
+        sprintf(buffer, "-ss %ld ", shutter_speed);
+        strcat(command, buffer);
+    }
+    sprintf(buffer, "-w %s -h %s -o %d-%02d-%02d_%02d:%02d:%02d.jpg", resolution[0], resolution[1], 
+                tm.tm_year+1900, tm.tm_mon +1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+    strcat(command, buffer); //adds the resolution and filename (always)
 
     printf("command: %s\n", command); //debug printf
     system(command); //creates the actual command that is sent into cmd
@@ -63,7 +99,7 @@ static void controls(){
     GtkWidget *scale, *brightness_scale, *saturation_scale, *sharpness_scale, *contrast_scale, *iso_scale, *ss_scale;
 
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(window), "testiliukuri");
+    gtk_window_set_title(GTK_WINDOW(window), "Camera settings");
     g_signal_connect(window, "delete-event", G_CALLBACK (delete_event), NULL);
 
     gtk_container_set_border_width (GTK_CONTAINER(window), 10);
@@ -77,7 +113,7 @@ static void controls(){
     gtk_box_pack_start(GTK_BOX(box1), label, FALSE, FALSE, 0);
     gtk_label_set_angle(GTK_LABEL(label), (gdouble) 90);
     gtk_widget_show(label);
-
+ 
     adj1 = gtk_adjustment_new(50, 0, 101, 0, 0, 1);
     g_signal_connect(adj1, "value_changed", G_CALLBACK(brightness_control), NULL);
     brightness_scale = gtk_vscale_new(GTK_ADJUSTMENT(adj1));
@@ -87,13 +123,8 @@ static void controls(){
 
     box2 = gtk_vbox_new(FALSE, 10);
     gtk_box_pack_start(GTK_BOX(box1), box2, TRUE, TRUE, 0);
-    gtk_container_set_border_width(GTK_CONTAINER(box2),10);
+    gtk_container_set_border_width(GTK_CONTAINER(box2), 0);
     gtk_widget_show(box2);
-
-    button = gtk_button_new_with_label("debug");
-    g_signal_connect(button, "clicked", G_CALLBACK(callback), (gpointer) "button 1");
-    gtk_box_pack_start(GTK_BOX(box2), button, TRUE, TRUE, 0);
-    gtk_widget_show(button);
 
     label = gtk_label_new("Resolution");
     gtk_box_pack_start(GTK_BOX(box2), label, FALSE, FALSE, 0);
@@ -114,52 +145,102 @@ static void controls(){
     gtk_box_pack_start(GTK_BOX(box2), opt, TRUE, TRUE, 0);
     gtk_widget_show(opt);
 
+    //sharpness
     label = gtk_label_new("Sharpness");
     gtk_box_pack_start(GTK_BOX(box2), label, FALSE, FALSE, 0);
     gtk_widget_show(label);
+
+    box3 = gtk_hbox_new(FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(box2), box3, TRUE, TRUE, 0);
+    gtk_container_set_border_width(GTK_CONTAINER(box3), 10);
+    gtk_widget_show(box3);
 
     adj1 = gtk_adjustment_new(0, -100, 101, 0.1, 1, 1);
     g_signal_connect(adj1, "value_changed", G_CALLBACK(sharpness_control), NULL);
     sharpness_scale = gtk_hscale_new(GTK_ADJUSTMENT(adj1));
     gtk_widget_set_size_request(GTK_WIDGET(sharpness_scale), 200, -1);
-    gtk_box_pack_start(GTK_BOX(box2), sharpness_scale, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(box3), sharpness_scale, TRUE, TRUE, 0);
     gtk_widget_show(sharpness_scale);
 
+    button = gtk_check_button_new();
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), TRUE);
+    gtk_box_pack_start (GTK_BOX(box3), button, TRUE, TRUE, 0);
+    gtk_widget_show(button);
+    g_signal_connect(button, "toggled", G_CALLBACK(auto_sh), adj1);
+
+    //contrast
     label = gtk_label_new("Contrast");
     gtk_box_pack_start(GTK_BOX(box2), label, FALSE, FALSE, 0);
     gtk_widget_show(label);
+
+    box3 = gtk_hbox_new(FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(box2), box3, TRUE, TRUE, 0);
+    gtk_container_set_border_width(GTK_CONTAINER(box3), 10);
+    gtk_widget_show(box3);
 
     adj1 = gtk_adjustment_new(0, -100, 101, 0.1, 1, 1);
     g_signal_connect(adj1, "value_changed", G_CALLBACK(contrast_control), NULL);
     contrast_scale = gtk_hscale_new(GTK_ADJUSTMENT(adj1));
     gtk_widget_set_size_request(GTK_WIDGET(contrast_scale), 200, -1);
-    gtk_box_pack_start(GTK_BOX(box2), contrast_scale, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(box3), contrast_scale, TRUE, TRUE, 0);
     gtk_widget_show(contrast_scale);
+    
+    button = gtk_check_button_new();
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), TRUE);
+    gtk_box_pack_start (GTK_BOX(box3), button, TRUE, TRUE, 0);
+    gtk_widget_show(button);
+    g_signal_connect(button, "toggled", G_CALLBACK(auto_co), adj1);
 
+    //saturation
     label = gtk_label_new("Saturation");
     gtk_box_pack_start(GTK_BOX(box2), label, FALSE, FALSE, 0);
     gtk_widget_show(label);
+
+    box3 = gtk_hbox_new(FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(box2), box3, TRUE, TRUE, 0);
+    gtk_container_set_border_width(GTK_CONTAINER(box3), 10);
+    gtk_widget_show(box3);
 
     adj1 = gtk_adjustment_new(0, -100, 101, 0.1, 1, 1);
     g_signal_connect(adj1, "value_changed", G_CALLBACK(saturation_control), NULL);
     saturation_scale = gtk_hscale_new(GTK_ADJUSTMENT(adj1));
     gtk_widget_set_size_request(GTK_WIDGET(saturation_scale), 200, -1);
-    gtk_box_pack_start(GTK_BOX(box2), saturation_scale, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(box3), saturation_scale, TRUE, TRUE, 0);
     gtk_widget_show(saturation_scale);
 
+    button = gtk_check_button_new();
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), TRUE);
+    gtk_box_pack_start (GTK_BOX(box3), button, TRUE, TRUE, 0);
+    gtk_widget_show(button);
+    g_signal_connect(button, "toggled", G_CALLBACK(auto_sa), adj1);
+
+    //ISO
     label = gtk_label_new("ISO");
     gtk_box_pack_start(GTK_BOX(box2), label, FALSE, FALSE, 0);
     gtk_widget_show(label);
+
+    box3 = gtk_hbox_new(FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(box2), box3, TRUE, TRUE, 0);
+    gtk_container_set_border_width(GTK_CONTAINER(box3), 10);
+    gtk_widget_show(box3);
 
     adj1 = gtk_adjustment_new(450, 100, 801, 0.1, 1, 1);
     g_signal_connect(adj1, "value_changed", G_CALLBACK(iso_control), NULL);
     iso_scale = gtk_hscale_new(GTK_ADJUSTMENT(adj1));
     gtk_widget_set_size_request(GTK_WIDGET(iso_scale), 200, -1);
-    gtk_box_pack_start(GTK_BOX(box2), iso_scale, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(box3), iso_scale, TRUE, TRUE, 0);
     gtk_widget_show(iso_scale);
 
+    button = gtk_check_button_new();
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), TRUE);
+    gtk_box_pack_start (GTK_BOX(box3), button, TRUE, TRUE, 0);
+    gtk_widget_show(button);
+    g_signal_connect(button, "toggled", G_CALLBACK(auto_iso), adj1);
+
+
+    //automatic shutter speed checkbox
     button = gtk_check_button_new_with_label("Automatic shutter speed");
-    //gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), TRUE);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), TRUE);
     gtk_box_pack_start (GTK_BOX(box2), button, TRUE, TRUE, 0);
     gtk_widget_show(button);
 
@@ -185,8 +266,8 @@ static void controls(){
     g_signal_connect(button, "clicked", G_CALLBACK(picture), NULL);
     gtk_box_pack_start(GTK_BOX(box2), button, TRUE, TRUE, 0);
     gtk_widget_show(button);
-    gtk_widget_show(window);
 
+    gtk_widget_show(window);
 }
 
 int main(int argc, char *argv[]){

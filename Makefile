@@ -1,5 +1,4 @@
 
-
 .POSIX:
 
 BIN=main
@@ -14,9 +13,7 @@ all: main
 $(BIN).o: $(BIN).c
 
 .c.o:
-	 $(CC) -o $@ -c $(CFLAGS) $(LDFLAGS) $< -lm
+	$(CC) -o $@ -c $(CFLAGS) $(LDFLAGS) $< -lm
 
 $(BIN): $(BIN).o
 	$(LD) -o $@ $< $(LDLIBS) -lm
-
-
