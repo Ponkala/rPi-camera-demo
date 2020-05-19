@@ -1,5 +1,5 @@
-#include <gtk/gtk.h>
 #include <math.h>
+#include <gtk/gtk.h>
 
 #define ARGUMENTS 5
 
@@ -12,7 +12,7 @@ long int shutter_speed = 20000;             //default manual ss (microseconds)
 int iso = 450;                              //default manual ISO
 char resolution[2][5] = {"1920", "1080"};   //default resolution
 char command_arguments[ARGUMENTS + 1][10];
-char auto_settings = 0x00;
+char auto_settings = 0x00;                  //each bit corresponds to a single control. 1 = Automatic, 0 = manual
 
 static void brightness_control(GtkAdjustment *adj){
     brightness = (int)adj->value;

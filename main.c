@@ -19,21 +19,12 @@ static gboolean delete_event(GtkWidget *widget, gpointer data){
     return FALSE;
 }
 
-static void auto_ss(GtkToggleButton *button, GtkAdjustment *adj){
+static void auto_br(GtkToggleButton *button, GtkAdjustment *adj){
     if(button->active){
-        auto_settings &= 0xDF; //11011111
+        auto_settings &= 0xFE; //11111110
     }else{
-        auto_settings |= 0x20; //00100000
-        shutter_speed_control(adj, NULL);
-    }
-}
-
-static void auto_iso(GtkToggleButton *button, GtkAdjustment *adj){
-    if(button->active){
-        auto_settings &= 0xEF; //11101111
-    }else{
-        auto_settings |= 0x10; //00010000
-        iso_control(adj);
+        auto_settings |= 0x01; //00000001
+        brightness_control(adj);
     }
 }
 
@@ -61,6 +52,24 @@ static void auto_sa(GtkToggleButton *button, GtkAdjustment *adj){
     }else{
         auto_settings |= 0x08; //00001000
         saturation_control(adj);
+    }
+}
+
+static void auto_iso(GtkToggleButton *button, GtkAdjustment *adj){
+    if(button->active){
+        auto_settings &= 0xEF; //11101111
+    }else{
+        auto_settings |= 0x10; //00010000
+        iso_control(adj);
+    }
+}
+
+static void auto_ss(GtkToggleButton *button, GtkAdjustment *adj){
+    if(button->active){
+        auto_settings &= 0xDF; //11011111
+    }else{
+        auto_settings |= 0x20; //00100000
+        shutter_speed_control(adj, NULL);
     }
 }
 
@@ -109,16 +118,28 @@ static void controls(){
     gtk_container_add(GTK_CONTAINER(window), box1);
     gtk_widget_show(box1);
 
+    //Brightness
     label = gtk_label_new("Brightness");
     gtk_box_pack_start(GTK_BOX(box1), label, FALSE, FALSE, 0);
     gtk_label_set_angle(GTK_LABEL(label), (gdouble) 90);
     gtk_widget_show(label);
- 
-    adj1 = gtk_adjustment_new(50, 0, 101, 0, 0, 1);
+
+    box2 = gtk_vbox_new(FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(box1), box2, TRUE, TRUE, 0);
+    gtk_container_set_border_width(GTK_CONTAINER(box2), 0);
+    gtk_widget_show(box2);
+
+    adj1 = gtk_adjustment_new(50, 0, 101, 1, 1, 1);
+    button = gtk_check_button_new();
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), TRUE);
+    gtk_box_pack_start (GTK_BOX(box2), button, TRUE, TRUE, 0);
+    gtk_widget_show(button);
+    g_signal_connect(button, "toggled", G_CALLBACK(auto_br), adj1);
+
     g_signal_connect(adj1, "value_changed", G_CALLBACK(brightness_control), NULL);
     brightness_scale = gtk_vscale_new(GTK_ADJUSTMENT(adj1));
-    gtk_widget_set_size_request(GTK_WIDGET(brightness_scale), 50, -1);
-    gtk_box_pack_start(GTK_BOX(box1), brightness_scale, TRUE, TRUE, 0);
+    gtk_widget_set_size_request(GTK_WIDGET(brightness_scale), 0, 500);
+    gtk_box_pack_start(GTK_BOX(box2), brightness_scale, TRUE, TRUE, 0);
     gtk_widget_show(brightness_scale);
 
     box2 = gtk_vbox_new(FALSE, 10);
@@ -126,6 +147,7 @@ static void controls(){
     gtk_container_set_border_width(GTK_CONTAINER(box2), 0);
     gtk_widget_show(box2);
 
+    //Resolution
     label = gtk_label_new("Resolution");
     gtk_box_pack_start(GTK_BOX(box2), label, FALSE, FALSE, 0);
     gtk_widget_show(label);
@@ -139,6 +161,9 @@ static void controls(){
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
     item = make_menu_item("3840 x 2160", G_CALLBACK(resolution_control), "38402160");
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+    item = make_menu_item("4056 x 3040", G_CALLBACK(resolution_control), "40563040");
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
     gtk_option_menu_set_menu(GTK_OPTION_MENU(opt), menu);
@@ -265,6 +290,7 @@ static void controls(){
     button = gtk_button_new_with_label("Snap");
     g_signal_connect(button, "clicked", G_CALLBACK(picture), NULL);
     gtk_box_pack_start(GTK_BOX(box2), button, TRUE, TRUE, 0);
+    gtk_widget_set_size_request(GTK_WIDGET(button), 200, 50);
     gtk_widget_show(button);
 
     gtk_widget_show(window);
